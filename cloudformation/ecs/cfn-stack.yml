@@ -75,16 +75,6 @@ Resources:
       VpcId: 
         Fn::ImportValue: infrastructure-poc-wordpress-vpc-VPCID
 
-  EC2SecurityGroupPublicLoadBalancer:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Access to the public facing load balancer
-      VpcId: 
-        Fn::ImportValue: infrastructure-poc-wordpress-vpc-VPCID
-      SecurityGroupIngress:
-          - CidrIp: 0.0.0.0/0
-            IpProtocol: -1
-
   EC2SecurityGroupIngressInternal:
     Type: AWS::EC2::SecurityGroupIngress
     Properties:
@@ -93,14 +83,6 @@ Resources:
       IpProtocol: -1
       SourceSecurityGroupId: !Ref EC2SecurityGroupECSHost
             
-  EC2SecurityGroupIngressPublicALB:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      Description: Ingress from the public ALB
-      GroupId: !Ref EC2SecurityGroupECSHost
-      IpProtocol: -1
-      SourceSecurityGroupId: !Ref EC2SecurityGroupPublicLoadBalancer
-
 ##
 # ECS
 ##
@@ -182,49 +164,6 @@ Resources:
               - elasticloadbalancing:RegisterInstancesWithLoadBalancer
               - elasticloadbalancing:RegisterTargets
             Resource: '*'
-##
-# ElasticLoadBalancingV2
-##
-
-  ElasticLoadBalancingV2LoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Scheme: internet-facing
-      LoadBalancerAttributes:
-      - Key: idle_timeout.timeout_seconds
-        Value: 30
-      Subnets:
-        - Fn::ImportValue: infrastructure-poc-wordpress-vpc-PublicSubnet1
-        - Fn::ImportValue: infrastructure-poc-wordpress-vpc-PublicSubnet2
-      SecurityGroups: 
-        - !Ref EC2SecurityGroupPublicLoadBalancer
-
-  ElasticLoadBalancingV2Listener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    DependsOn:
-      - ElasticLoadBalancingV2LoadBalancer
-    Properties:
-      DefaultActions:
-        - TargetGroupArn: !Ref ElasticLoadBalancingV2TargetGroupDummy
-          Type: forward
-      LoadBalancerArn: !Ref ElasticLoadBalancingV2LoadBalancer
-      Port: 80
-      Protocol: HTTP
-        
-  ElasticLoadBalancingV2TargetGroupDummy:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      HealthCheckIntervalSeconds: 6
-      HealthCheckPath: /
-      HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      Name: poc-wp-dummy # TODO howto 32 char limit for some stupid reason.!Join ['-', [!Ref 'AWS::StackName', 'drop-1']]
-      Port: 80
-      Protocol: HTTP
-      UnhealthyThresholdCount: 2
-      VpcId: 
-        Fn::ImportValue: infrastructure-poc-wordpress-vpc-VPCID
 
 Outputs:
   ClusterName:
@@ -232,21 +171,11 @@ Outputs:
     Value: !Ref ECSCluster
     Export:
       Name: !Sub "${AWS::StackName}-ClusterName"
-  ExternalUrl:
-    Description: The url of the external load balancer
-    Value: !Sub "http://${ElasticLoadBalancingV2LoadBalancer.DNSName}"
-    Export:
-      Name: !Sub "${AWS::StackName}-ExternalUrl"
   ECSRole:
     Description: The ARN of the ECS role
     Value: !GetAtt IAMRoleECS.Arn
     Export:
       Name: !Sub "${AWS::StackName}-ECSRole"
-  PublicListener:
-    Description: The ARN of the public load balancer's Listener
-    Value: !Ref ElasticLoadBalancingV2Listener
-    Export:
-      Name: !Sub "${AWS::StackName}-PublicListener"
   EC2SecurityGroupECSHost:
     Description: A security group used to allow containers to receive traffic
     Value: !Ref EC2SecurityGroupECSHost
