@@ -2,6 +2,10 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Provisions a VPC with 2 public subnets.
 
 Parameters:
+  EC2AMI:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+
   VPCCIDR:
     Type: String
     Default: 10.2.0.0/16
@@ -96,6 +100,44 @@ Resources:
     Properties:
       RouteTableId: !Ref EC2RouteTablePublic
       SubnetId: !Ref EC2SubnetPublic2
+
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref EC2AMI
+      InstanceType: t3.micro
+      KeyName: master-of destruction-2
+      SubnetId: !Ref EC2SubnetPublic1
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-BastionInstance'
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription:
+        !Sub 'Security group for ${AWS::StackName} bastion host'
+      VpcId: !Ref EC2VPC
+
+  BastionAllowInboundSSHFromInternet:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref EC2SecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+      CidrIp: 0.0.0.0/0
+
+  BastionAllowOutboundSSHToApplication:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref EC2SecurityGroup
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+
 
 Outputs:
   VPC:
